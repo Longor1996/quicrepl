@@ -34,10 +34,12 @@ A commandline REPL tool for the QUIC network protocol.
 - Install [rustup](https://rustup.rs/) and necessary build-tools.
 - Confirm that rust works:  
   `rustc --version`
-- Clone this repository
+- Clone this repository:  
+  `git clone https://github.com/Longor1996/quicrepl.git`
 - Jump into the directory:  
   `cd quicrepl`
-- `cargo build`
+- Build it:  
+  `cargo build`
 
 ## Usage
 
