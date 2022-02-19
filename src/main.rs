@@ -36,7 +36,7 @@ async fn main() -> Result<()> {
     })?;
     
     match &args.what {
-        ClientOrServer::Client { addr } => client::main(&args, *addr, stop_tx).await,
+        ClientOrServer::Client { addr, system_certs } => client::main(&args, addr.clone(), *system_certs, stop_tx).await,
         ClientOrServer::Server { addr } => server::main(&args, *addr, stop_tx).await,
     }
 }

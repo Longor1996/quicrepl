@@ -17,6 +17,10 @@ pub struct MainArgs {
     #[clap(short = 'h', long = "host", env = "QUICREPL_HOST")]
     pub host: Option<String>,
     
+    /// ALPN protocol names to use.
+    #[clap(short = 'p', long = "alpn", env = "QUICREPL_ALPN")]
+    pub alpn: Vec<String>,
+    
     /// Shall we be a client or a server?
     #[clap(subcommand)]
     pub what: ClientOrServer,
@@ -34,7 +38,11 @@ pub enum ClientOrServer {
     Client {
         /// Address to connect to
         #[structopt(default_value = "[::1]:4433", env = "QUICREPL_ADDR")]
-        addr: SocketAddr,
+        addr: String,
+        
+        /// Allow loading system certificates?
+        #[structopt(global = true, short = 's', long = "syscerts", env = "QUICREPL_SYSCERTS")]
+        system_certs: bool,
     },
     
     /// Start as a server and respond to clients.

@@ -4,17 +4,34 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+# Framework & Utilities
 tokio = { version = "1.16.1", features = ["rt-multi-thread", "macros", "net", "fs", "sync", "time", "process"] }
-clap = { version = "3.0.14", features = ["derive", "color", "env"] }
-ctrlc = { version = "3.2.1", features = ["termination"] }
-rustls = "0.20.2"
-rustls-pemfile = "0.2.1"
 futures-util = "0.3"
 tracing = "0.1.30"
 tracing-subscriber = "0.3.7"
-dotenv = "0.15.0"
-anyhow = "1.0"
 bytes = "1.1.0"
+anyhow = "1.0"
+
+# User Interface
+clap = { version = "3.0.14", features = ["derive", "color", "env"] }
+ctrlc = { version = "3.2.1", features = ["termination"] }
+rustyline = "9.1.2"
+
+# Configuration
+dotenv = "0.15.0"
+serde = { version = "1.0", features = ["derive"]}
+serde_bytes = "0.11"
+serde_json = "1.0"
+toml = "0.5.8"
+
+# Security & Networking
 quinn = "0.8.0"
 rcgen = "0.9.0"
-rustyline = "9.1.2"
+#curl = "0.4.42" # if requested: init()
+rustls = "0.20.2"
+rustls-pemfile = "0.3.0"
+rustls-native-certs = "0.6.1"
+
+# I/O
+# Most I/O is handled by Tokio.
+os_pipe = "1.0"

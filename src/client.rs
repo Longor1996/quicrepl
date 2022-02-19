@@ -1,35 +1,82 @@
 use super::*;
 use clap::Parser;
 
-pub async fn main(args: &MainArgs, addr: SocketAddr, stop: StopTx) -> Result<()> {
+pub async fn main(args: &MainArgs, addr: String, system_certs: bool, stop: StopTx) -> Result<()> {
     info!("Starting client...");
     
     let mut roots = rustls::RootCertStore::empty();
     
     let cert = args.cert.clone().unwrap_or_else(|| "./cert.der".into());
-    let cert = tokio::fs::read(cert).await?;
-    let cert = rustls::Certificate(cert);
+    match tokio::fs::read(&cert).await {
+        Ok(cert) => {
+            let cert = rustls::Certificate(cert);
+            roots.add(&cert).context("adding certificate to temporary ca-root")?;
+        },
+        Err(err) => warn!("Failed to load certificate {cert:?}: {err}")
+    }
     
-    roots.add(&cert).context("adding certificate to temporary ca-root")?;
+    if system_certs {
+        info!("Loading system root certificates...");
+        let certs = rustls_native_certs::load_native_certs()?
+                .drain(..)
+                .map(|c|c.0)
+                .collect::<Vec<_>>();
+        roots.add_parsable_certificates(&certs);
+    }
     
-    let client_crypto = rustls::ClientConfig::builder()
-        .with_safe_defaults()
-        .with_root_certificates(roots)
-        .with_no_client_auth();
+    let client_crypto = {
+        info!("Creating crypto-config with {} certificate root(s) and {} ALPN protocol(s)...", roots.len(), args.alpn.len());
+        
+        let mut cc = rustls::ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(roots)
+            .with_no_client_auth();
+        
+        cc.enable_early_data = true;
+        cc.enable_sni = true;
+        
+        if !args.alpn.is_empty() {
+            cc.alpn_protocols.extend(args.alpn.iter().map(|p|p.as_bytes().to_owned()));
+        }
+        
+        cc
+    };
     
-    let mut config = quinn::ClientConfig::new(Arc::new(client_crypto));
-    Arc::get_mut(&mut config.transport)
-        .unwrap()
-        .keep_alive_interval(std::time::Duration::from_secs(1).into());
+    let endpoint = {
+        let mut config = quinn::ClientConfig::new(Arc::new(client_crypto));
+        Arc::get_mut(&mut config.transport)
+            .unwrap()
+            .keep_alive_interval(std::time::Duration::from_secs(1).into());
+        
+        let mut e = quinn::Endpoint::client("[::]:0".parse().unwrap())?;
+        e.set_default_client_config(config);
+        e
+    };
     
-    let mut endpoint = quinn::Endpoint::client("[::]:0".parse().unwrap())?;
-    
-    endpoint.set_default_client_config(config);
     info!("Created local endpoint: {:?}", endpoint.local_addr());
     
-    let hostname = args.host.clone().unwrap_or_else(|| "localhost".to_owned());
-    info!("Connecting to {}, assuming hostname '{}' ...", addr, hostname);
-    let conn = endpoint.connect(addr, &hostname)?;
+    let hostname = args.host.clone().unwrap_or_else(|| addr.clone());
+    let hostname = hostname.rsplit_once(':').map(|(h,_)|h).unwrap_or(&hostname);
+    
+    let addr = match addr.parse::<SocketAddr>() {
+        Ok(addr) => addr,
+        Err(err) => {
+            error!("{err}");
+            info!("Resolving address: {}", &addr);
+            let names = tokio::net::lookup_host(addr)
+                .await
+                .context("resolving hostname")?
+                .collect::<Vec<_>>();
+            let sa = names.first().cloned().expect("no results");
+            debug!("Found {} target(s)", names.len());
+            debug!("Using {sa}");
+            sa
+        },
+    };
+    
+    info!("Connecting to {addr}, using hostname '{hostname}'...");
+    let conn = endpoint.connect(addr, hostname)
+        .context("initial connection to remote server")?;
     
     let quinn::NewConnection {
         connection,
@@ -37,7 +84,9 @@ pub async fn main(args: &MainArgs, addr: SocketAddr, stop: StopTx) -> Result<()>
         mut bi_streams,
         mut datagrams,
         ..
-    } = conn.await?;
+    } = conn
+        .await
+        .context("completing connection to remote server")?;
     
     use rustyline::{*, error::ReadlineError};
     let mut rl = Editor::<()>::new();

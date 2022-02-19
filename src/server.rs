@@ -7,12 +7,19 @@ pub async fn main(args: &MainArgs, addr: SocketAddr, stop: StopTx) -> Result<()>
     
     let (cert, pkey) = server_get_certs(args).await?;
     
-    let server_crypto = rustls::ServerConfig::builder()
-        .with_safe_defaults()
-        .with_no_client_auth()
-        .with_single_cert(cert, pkey)?;
+    let server_crypto = {
+        let mut sc = rustls::ServerConfig::builder()
+            .with_safe_defaults()
+            .with_no_client_auth()
+            .with_single_cert(cert, pkey)?;
+        if !args.alpn.is_empty() {
+            sc.alpn_protocols.extend(args.alpn.iter().map(|p|p.as_bytes().to_owned()));
+        }
+        sc
+    };
     
     let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(server_crypto));
+    
     Arc::get_mut(&mut server_config.transport)
         .unwrap()
         .keep_alive_interval(std::time::Duration::from_secs(1).into())
